@@ -1,3 +1,4 @@
+
 import { bcs, BcsType } from '@mysten/sui/bcs'
 import {
   Transaction,
@@ -33,7 +34,7 @@ export function splitGenericParameters(
   genericSeparators: [string, string] = ['<', '>']
 ) {
   const [left, right] = genericSeparators
-  const tok = []
+  const tok: string[] = []
   let word = ''
   let nestedAngleBrackets = 0
 
@@ -392,3 +393,4 @@ export function composeSuiType(typeName: string, ...typeArgs: string[]): string 
     return typeName
   }
 }
+

@@ -1,11 +1,12 @@
 [config]
-rpc = "https://fullnode.testnet.sui.io:443"
+rpc = "https://fullnode.mainnet.sui.io:443"
 
 [packages]
-ExamplesChain = { id = "0x75818a1083fface3dec10fc5f7466d3adafe7bcf2485248160ea4bb17b8afabe" }
-SuiChain = { id = "0x2" }
-MoveStdlibChain = { id = "0x1" }
+#AMM = { local = "../../../move/amm" }
+#Examples = { local = "../../../move/examples" }
+AftermathAfterburnerVault = {id = "0x2d6755e10132fc1eab5e8a4a3e7ddfdacc31884621592d95fce48ecf1e157db9" }
+#AftermathAfterburnerVault = { local = "../../../move/afterburner-vaults" }
+edition = "2024"
 
-Examples = { local = "../../../move/examples" }
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.27.2" }
-MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "mainnet-v1.27.2" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "mainnet-v1.51.5" }
+

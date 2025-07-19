@@ -1,7 +1,9 @@
+
 import { bcs, BcsType } from '@mysten/sui/bcs'
 import { fromHEX, toHEX } from '@mysten/sui/utils'
 import { FieldsWithTypes, compressSuiType, parseTypeName } from './util'
 import { SuiClient, SuiParsedData, SuiObjectData } from '@mysten/sui/client'
+import { EnumOutputShapeWithKeys } from '@mysten/bcs';
 
 // for backwards compatibility
 export { vector } from './vector'
@@ -15,6 +17,12 @@ export interface StructClass {
   toJSON(): Record<string, any>
 
   __StructClass: true
+}
+
+export interface EnumClass {
+  $typeName: string;
+  $fullTypeName: string;
+  $typeArgs: string[];
 }
 
 export interface VectorClass {
@@ -31,7 +39,7 @@ export interface VectorClass {
 }
 
 export type Primitive = 'bool' | 'u8' | 'u16' | 'u32' | 'u64' | 'u128' | 'u256' | 'address'
-export type TypeArgument = StructClass | Primitive | VectorClass
+export type TypeArgument = StructClass | Primitive | VectorClass | EnumClass;
 
 export interface StructClassReified<T extends StructClass, Fields> {
   typeName: T['$typeName'] // e.g., '0x2::balance::Balance', without type arguments
@@ -68,26 +76,52 @@ export interface VectorClassReified<T extends VectorClass, Elements> {
   kind: 'VectorClassReified'
 }
 
+export interface EnumClassReified<T extends EnumClass, Data> {
+  typeName: T['$typeName']; // e.g., '0x2::balance::Balance', without type arguments
+  fullTypeName: ToTypeStr<T>;
+  typeArgs: T['$typeArgs']; // e.g., ['0x2::sui:SUI']
+  reifiedTypeArgs: Array<
+    Reified<TypeArgument, any> | PhantomReified<PhantomTypeArgument>
+  >;
+  fromBcs(data: Uint8Array): T;
+  bcs: BcsType<any>;
+  // fromJSONField: (field: any) => T;
+  fromFields: (fields: EnumOutputShapeWithKeys<any, string>) => T;
+  fromFieldsWithTypes: (fields: EnumOutputShapeWithKeys<any, string>) => T;
+  new: (data: Data) => T;
+
+  kind: 'EnumClassReified';
+}
+
 export type Reified<T extends TypeArgument, Fields> = T extends Primitive
   ? Primitive
   : T extends StructClass
-    ? StructClassReified<T, Fields>
-    : T extends VectorClass
-      ? VectorClassReified<T, Fields>
-      : never
+  ? StructClassReified<T, Fields>
+  : T extends VectorClass
+  ? VectorClassReified<T, Fields>
+  : T extends EnumClass
+  ? EnumClassReified<T, Fields>
+  : never;
 
 export type ToTypeArgument<
-  T extends Primitive | StructClassReified<StructClass, any> | VectorClassReified<VectorClass, any>,
+  T extends
+    | Primitive
+    | StructClassReified<StructClass, any>
+    | VectorClassReified<VectorClass, any>
+    | EnumClassReified<EnumClass, any>,
 > = T extends Primitive
   ? T
   : T extends StructClassReified<infer U, any>
-    ? U
-    : T extends VectorClassReified<infer U, any>
-      ? U
-      : never
+  ? U
+  : T extends VectorClassReified<infer U, any>
+  ? U
+  : T extends EnumClassReified<infer U, any>
+  ? U
+  : never;
 
-export type ToPhantomTypeArgument<T extends PhantomReified<PhantomTypeArgument>> =
-  T extends PhantomReified<infer U> ? U : never
+export type ToPhantomTypeArgument<
+  T extends PhantomReified<PhantomTypeArgument>,
+> = T extends PhantomReified<infer U> ? U : never;
 
 export type PhantomTypeArgument = string
 
@@ -98,9 +132,13 @@ export interface PhantomReified<P> {
 
 export function phantom<T extends Reified<TypeArgument, any>>(
   reified: T
-): PhantomReified<ToTypeStr<ToTypeArgument<T>>>
-export function phantom<P extends PhantomTypeArgument>(phantomType: P): PhantomReified<P>
-export function phantom(type: string | Reified<TypeArgument, any>): PhantomReified<string> {
+): PhantomReified<ToTypeStr<ToTypeArgument<T>>>;
+export function phantom<P extends PhantomTypeArgument>(
+  phantomType: P,
+): PhantomReified<P>;
+export function phantom(
+  type: string | Reified<TypeArgument, any>,
+): PhantomReified<string> {
   if (typeof type === 'string') {
     return {
       phantomType: type,
@@ -117,10 +155,12 @@ export function phantom(type: string | Reified<TypeArgument, any>): PhantomReifi
 export type ToTypeStr<T extends TypeArgument> = T extends Primitive
   ? T
   : T extends StructClass
-    ? T['$fullTypeName']
-    : T extends VectorClass
-      ? T['$fullTypeName']
-      : never
+  ? T['$fullTypeName']
+  : T extends VectorClass
+  ? T['$fullTypeName']
+  : T extends EnumClass
+  ? T['$fullTypeName']
+  : never;
 
 export type PhantomToTypeStr<T extends PhantomTypeArgument> = T extends PhantomTypeArgument
   ? T
@@ -129,76 +169,79 @@ export type PhantomToTypeStr<T extends PhantomTypeArgument> = T extends PhantomT
 export type ToJSON<T extends TypeArgument> = T extends 'bool'
   ? boolean
   : T extends 'u8'
-    ? number
-    : T extends 'u16'
-      ? number
-      : T extends 'u32'
-        ? number
-        : T extends 'u64'
-          ? string
-          : T extends 'u128'
-            ? string
-            : T extends 'u256'
-              ? string
-              : T extends 'address'
-                ? string
-                : T extends { $typeName: '0x1::string::String' }
-                  ? string
-                  : T extends { $typeName: '0x1::ascii::String' }
-                    ? string
-                    : T extends { $typeName: '0x2::object::UID' }
-                      ? string
-                      : T extends { $typeName: '0x2::object::ID' }
-                        ? string
-                        : T extends { $typeName: '0x2::url::Url' }
-                          ? string
-                          : T extends {
-                                $typeName: '0x1::option::Option'
-                                __inner: infer U extends TypeArgument
-                              }
-                            ? ToJSON<U> | null
-                            : T extends VectorClass
-                              ? ReturnType<T['toJSONField']>
-                              : T extends StructClass
-                                ? ReturnType<T['toJSONField']>
-                                : never
+  ? number
+  : T extends 'u16'
+  ? number
+  : T extends 'u32'
+  ? number
+  : T extends 'u64'
+  ? string
+  : T extends 'u128'
+  ? string
+  : T extends 'u256'
+  ? string
+  : T extends 'address'
+  ? string
+  : T extends { $typeName: '0x1::string::String' }
+  ? string
+  : T extends { $typeName: '0x1::ascii::String' }
+  ? string
+  : T extends { $typeName: '0x2::object::UID' }
+  ? string
+  : T extends { $typeName: '0x2::object::ID' }
+  ? string
+  : T extends { $typeName: '0x2::url::Url' }
+  ? string
+  : T extends {
+      $typeName: '0x1::option::Option'
+      __inner: infer U extends TypeArgument
+    }
+  ? ToJSON<U> | null
+  : T extends VectorClass
+  ? ReturnType<T['toJSONField']>
+  : T extends StructClass
+  ? ReturnType<T['toJSONField']>
+  : never
 
 export type ToField<T extends TypeArgument> = T extends 'bool'
   ? boolean
   : T extends 'u8'
-    ? number
-    : T extends 'u16'
-      ? number
-      : T extends 'u32'
-        ? number
-        : T extends 'u64'
-          ? bigint
-          : T extends 'u128'
-            ? bigint
-            : T extends 'u256'
-              ? bigint
-              : T extends 'address'
-                ? string
-                : T extends { $typeName: '0x1::string::String' }
-                  ? string
-                  : T extends { $typeName: '0x1::ascii::String' }
-                    ? string
-                    : T extends { $typeName: '0x2::object::UID' }
-                      ? string
-                      : T extends { $typeName: '0x2::object::ID' }
-                        ? string
-                        : T extends { $typeName: '0x2::url::Url' }
-                          ? string
-                          : T extends {
-                                $typeName: '0x1::option::Option'
-                                __inner: infer U extends TypeArgument
-                              }
-                            ? ToField<U> | null
-                            : T extends VectorClass
-                              ? T['elements']
-                              : T extends StructClass
-                                ? T
-                                : never
+  ? number
+  : T extends 'u16'
+  ? number
+  : T extends 'u32'
+  ? number
+  : T extends 'u64'
+  ? bigint
+  : T extends 'u128'
+  ? bigint
+  : T extends 'u256'
+  ? bigint
+  : T extends 'address'
+  ? string
+  : T extends { $typeName: '0x1::string::String' }
+  ? string
+  : T extends { $typeName: '0x1::ascii::String' }
+  ? string
+  : T extends { $typeName: '0x2::object::UID' }
+  ? string
+  : T extends { $typeName: '0x2::object::ID' }
+  ? string
+  : T extends { $typeName: '0x2::url::Url' }
+  ? string
+  : T extends {
+      $typeName: '0x1::option::Option'
+      __inner: infer U extends TypeArgument
+    }
+  ? ToField<U> | null
+  : T extends VectorClass
+  ? T['elements']
+  : T extends StructClass
+  ? T
+  : T extends EnumClass
+  ? T
+
+  : never;
 
 const Address = bcs.bytes(32).transform({
   input: (val: string) => fromHEX(val),
@@ -237,7 +280,10 @@ export function extractType<T extends PhantomReified<PhantomTypeArgument>>(
 export function extractType<
   T extends Reified<TypeArgument, any> | PhantomReified<PhantomTypeArgument>,
 >(reified: T): string
-export function extractType(reified: Reified<TypeArgument, any> | PhantomReified<string>): string {
+
+export function extractType(
+  reified: Reified<TypeArgument, any> | PhantomReified<string>,
+): string {
   switch (reified) {
     case 'u8':
     case 'u16':
@@ -256,12 +302,17 @@ export function extractType(reified: Reified<TypeArgument, any> | PhantomReified
       return reified.fullTypeName
     case 'VectorClassReified':
       return reified.fullTypeName
+    case 'EnumClassReified':
+      return reified.fullTypeName;
   }
 
   throw new Error('unreachable')
 }
 
-export function decodeFromFields(reified: Reified<TypeArgument, any>, field: any) {
+export function decodeFromFields(
+  reified: Reified<TypeArgument, any>,
+  field: any,
+) {
   switch (reified) {
     case 'bool':
     case 'u8':
@@ -292,14 +343,17 @@ export function decodeFromFields(reified: Reified<TypeArgument, any>, field: any
       if (field.vec.length === 0) {
         return null
       }
-      return (reified.fromFields(field) as any).vec[0]
+      return ((reified as any).fromFields(field) as any).vec[0];
     }
     default:
       return reified.fromFields(field)
   }
 }
 
-export function decodeFromFieldsWithTypes(reified: Reified<TypeArgument, any>, item: any) {
+export function decodeFromFieldsWithTypes(
+  reified: Reified<TypeArgument, any>,
+  item: any,
+) {
   switch (reified) {
     case 'bool':
     case 'u8':
@@ -325,12 +379,17 @@ export function decodeFromFieldsWithTypes(reified: Reified<TypeArgument, any>, i
     case '0x2::object::UID':
       return item.id
     case '0x2::balance::Balance':
-      return reified.fromFields({ value: BigInt(item) })
+      return (reified as StructClassReified<StructClass, any>).fromFields({
+        value: BigInt(item),
+      });
     case '0x1::option::Option': {
       if (item === null) {
         return null
       }
-      return decodeFromFieldsWithTypes((reified as any).reifiedTypeArgs[0], item)
+      return decodeFromFieldsWithTypes(
+        (reified as any).reifiedTypeArgs[0],
+        item,
+      );
     }
     default:
       return reified.fromFieldsWithTypes(item)
@@ -340,30 +399,33 @@ export function decodeFromFieldsWithTypes(reified: Reified<TypeArgument, any>, i
 export function assertReifiedTypeArgsMatch(
   fullType: string,
   typeArgs: string[],
-  reifiedTypeArgs: Array<Reified<TypeArgument, any> | PhantomReified<string>>
+  reifiedTypeArgs: Array<Reified<TypeArgument, any> | PhantomReified<string>>,
 ) {
   if (reifiedTypeArgs.length !== typeArgs.length) {
     throw new Error(
-      `provided item has mismatching number of type argments ${fullType} (expected ${reifiedTypeArgs.length}, got ${typeArgs.length}))`
-    )
+      `provided item has mismatching number of type argments ${fullType} (expected ${reifiedTypeArgs.length}, got ${typeArgs.length}))`,
+    );
   }
   for (let i = 0; i < typeArgs.length; i++) {
-    if (compressSuiType(typeArgs[i]) !== compressSuiType(extractType(reifiedTypeArgs[i]))) {
+    if (
+      compressSuiType(typeArgs[i]) !==
+      compressSuiType(extractType(reifiedTypeArgs[i]))
+    ) {
       throw new Error(
         `provided item has mismatching type argments ${fullType} (expected ${extractType(
-          reifiedTypeArgs[i]
-        )}, got ${typeArgs[i]}))`
-      )
+          reifiedTypeArgs[i],
+        )}, got ${typeArgs[i]}))`,
+      );
     }
   }
 }
 
 export function assertFieldsWithTypesArgsMatch(
   item: FieldsWithTypes,
-  reifiedTypeArgs: Array<Reified<TypeArgument, any> | PhantomReified<string>>
+  reifiedTypeArgs: Array<Reified<TypeArgument, any> | PhantomReified<string>>,
 ) {
-  const { typeArgs: itemTypeArgs } = parseTypeName(item.type)
-  assertReifiedTypeArgsMatch(item.type, itemTypeArgs, reifiedTypeArgs)
+  const { typeArgs: itemTypeArgs } = parseTypeName(item.type);
+  assertReifiedTypeArgsMatch(item.type, itemTypeArgs, reifiedTypeArgs);
 }
 
 export function fieldToJSON<T extends TypeArgument>(type: string, field: ToField<T>): ToJSON<T> {
@@ -433,6 +495,10 @@ export function decodeFromJSONField(typeArg: Reified<TypeArgument, any>, field: 
       return decodeFromJSONField(typeArg.reifiedTypeArgs[0] as any, field)
     }
     default:
-      return typeArg.fromJSONField(field)
+      if ('fromJSONField' in typeArg) {
+        return typeArg.fromJSONField(field);
+      } else {
+        throw new Error('Enum class cant be decoded from JSON field');
+      }
   }
 }

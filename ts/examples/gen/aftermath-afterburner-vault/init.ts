@@ -1,0 +1,32 @@
+import * as authority from "./authority/structs";
+import * as events from "./events/structs";
+import * as stakedPosition from "./staked-position/structs";
+import * as vault from "./vault/structs";
+import * as version from "./version/structs";
+import {StructClassLoader} from "../_framework/loader";
+
+export function registerClasses(loader: StructClassLoader) { loader.register(authority.PACKAGE);
+loader.register(authority.VAULT);
+loader.register(authority.ADMIN);
+loader.register(authority.AuthorityCap);
+loader.register(events.Event);
+loader.register(events.CreatedVaultEventV1);
+loader.register(events.InitializedRewardEventV1);
+loader.register(events.AddedRewardEventV1);
+loader.register(events.UpdatedEmissionScheduleEventV1);
+loader.register(events.StakedEventV1);
+loader.register(events.LockedEventV1);
+loader.register(events.UnlockedEventV1);
+loader.register(events.JoinedEventV1);
+loader.register(events.SplitEventV1);
+loader.register(events.DepositedPrincipalEventV1);
+loader.register(events.WithdrewPrincipalEventV1);
+loader.register(events.HarvestedRewardsEventV1);
+loader.register(events.DestroyedStakedPositionEventV1);
+loader.register(version.Version);
+loader.register(vault.VAULT);
+loader.register(vault.Vault);
+loader.register(vault.OneTime);
+loader.register(stakedPosition.StakedPosition);
+loader.register(stakedPosition.HarvestRewardsCap);
+ }
